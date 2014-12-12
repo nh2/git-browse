@@ -93,6 +93,18 @@ class GitBrowser(ModalScrollingInterface):
             # not out of range for the newly loaded revision of the file.
             self.highlight_line = self.highlight_line
 
+    @ModalScrollingInterface.key_bindings('x')
+    def info(self, times=1):
+        with open('debug.out', 'a') as f:
+            f.write("%s\n" % self.highlight_line)
+            blame_line = self.content()[self.highlight_line]
+            f.write("--- blame line\n")
+            f.write("sha           %s\n" % blame_line.sha)
+            f.write("line          %s\n" % blame_line.line)
+            f.write("current       %s\n" % blame_line.current)
+            f.write("original_line %s\n" % blame_line.original_line)
+            f.write("final_line    %s\n" % blame_line.final_line)
+
     @ModalScrollingInterface.key_bindings(']')
     def next_commit(self, times=1):
         for i in range(0,times):
