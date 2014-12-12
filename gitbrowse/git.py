@@ -87,6 +87,22 @@ class GitFileHistory(object):
         self._blame = None
         return True
 
+    def jump_to_commit(self, sha):
+        """
+        Moves to the given commit SHA, returning False if it doesn't exist.
+        """
+        found_index = None
+        for i, commit in enumerate(self.commits):
+            if commit.sha == sha:
+                found_index = i
+
+        if found_index is None:
+            return False
+
+        self._index = found_index
+        self._blame = None
+        return True
+
     def blame(self):
         """
         Returns blame information for this file at the current commit as

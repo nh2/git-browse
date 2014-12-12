@@ -96,6 +96,27 @@ class GitBrowser(ModalScrollingInterface):
 
         self._update_mapping(start, finish)
 
+    def _jump_to_commit(self, sha):
+
+        start = self.file_history.current_commit.sha
+
+        if not self.file_history.jump_to_commit(sha):
+            curses.beep()
+            return
+
+        finish = sha
+
+        if start == finish:
+            curses.beep()
+            return
+
+        self._update_mapping(start, finish)
+
+    @ModalScrollingInterface.key_bindings('j')
+    def info(self, times=1):
+        blame_line = self.content()[self.highlight_line]
+        self._jump_to_commit(blame_line.sha)
+
     @ModalScrollingInterface.key_bindings(']')
     def next_commit(self, times=1):
         for i in range(0,times):
