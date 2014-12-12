@@ -105,6 +105,13 @@ class GitBrowser(ModalScrollingInterface):
             f.write("original_line %s\n" % blame_line.original_line)
             f.write("final_line    %s\n" % blame_line.final_line)
 
+    @ModalScrollingInterface.key_bindings('y')
+    def info(self, times=1):
+        blame_line = self.content()[self.highlight_line]
+        if blame_line.current:
+            return
+
+
     @ModalScrollingInterface.key_bindings(']')
     def next_commit(self, times=1):
         for i in range(0,times):
