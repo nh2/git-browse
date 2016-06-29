@@ -81,8 +81,8 @@ class ModalScrollingInterface(object):
 
     @highlight_line.setter
     def highlight_line(self, value):
-        # Ensure highlighted line in sane
-        max_highlight = len(self.file_history.blame()) - 1
+        # Ensure highlighted line is sane
+        max_highlight = max(0, len(self.file_history.blame()) - 1)
         if value < 0:
             value = 0
         elif value > max_highlight:
