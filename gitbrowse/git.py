@@ -182,8 +182,8 @@ class GitFileHistory(object):
         sections = []
 
         # Skip initial headers: They don't interest us.
-        line = ''
-        while not line.startswith('@@'):
+        line = p.readline()
+        while line != '' and not line.startswith('@@'):
             line = p.readline()
 
         while line:
