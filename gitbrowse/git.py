@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 
 class GitCommit(object):
@@ -158,112 +159,66 @@ class GitFileHistory(object):
         forward = {}
         backward = {}
 
-        # Get information about blank lines: The git diff porcelain format
-        # (which we use for everything else) doesn't distinguish between
-        # additions and removals, so this is a very dirty hack to get around
-        # the problem.
-        p = os.popen('git diff %s %s -- %s | grep -E "^[+-]$"' % (
-            start,
-            finish,
-            self.path,
-        ))
-        blank_lines = [l.strip() for l in p.readlines()]
+        # We use `diff` to track blocks of added, deleted and unchanged lines
+        # in order to build the line mapping.
+        # Its `--old/new/unchanged-group-format` flags make this very easy;
+        # it generates output like this:
+        #    u 8
+        #    o 3
+        #    n 4
+        #    u 1
+        # for a diff in which the first 8 lines are unchanged, then 3 deleted,
+        # then 4 added and then 1 unchanged.
+        # Below, we parse this output.
+        #
+        # In order to get the file contents of the two commits into `diff`,
+        # we use the equivalent of bash's /dev/fd/N based process subsititution,
+        # which would look like this:
+        #    diff <(git show commit1:file) <(git show commit2:file)
+        # (this works on all platforms where bash process substitution works).
 
-        p = os.popen('git diff --word-diff=porcelain %s %s -- %s' % (
-            start,
-            finish,
-            self.path,
-        ))
+        p_start = os.popen('git show %s:%s' % (start, self.path))
+        p_finish = os.popen('git show %s:%s' % (finish, self.path))
 
-        # The diff output is in sections: A header line (indicating the
-        # range of lines this section covers) and then a number of
-        # content lines.
+        p_diff = subprocess.Popen([
+            'diff',
+            '/dev/fd/' + str(p_start.fileno()),
+            '/dev/fd/' + str(p_finish.fileno()),
+            '--old-group-format=o %dn\n',  # lower case n for old file
+            '--new-group-format=n %dN\n',  # upper case N for new file
+            '--unchanged-group-format=u %dN\n',  # for unchanged it doesn't matter if n or N
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        sections = []
+        (out, err) = p_diff.communicate()
+        assert err == ''
 
-        # Skip initial headers: They don't interest us.
-        line = p.readline()
-        while line != '' and not line.startswith('@@'):
-            line = p.readline()
+        # Unfortunately, splitting the empty string in Python still gives us a singleton
+        # empty line (`''.split('\n') == ['']`), so we handle that case here.
+        diff_lines = [] if out == '' else out.strip().split('\n')
 
-        while line:
-            header_line = line
-            content_lines = []
+        start_ln = 0
+        finish_ln = 0
 
-            line = p.readline()
-            while line and not line.startswith('@@'):
-                content_lines.append(line)
-                line = p.readline()
+        for line in diff_lines:
+            assert len(line) >= 3
+            # Parse the output created with `diff` above.
+            typ, num_lines_str = line.split(' ')
+            num_lines = int(num_lines_str)
 
-            sections.append((header_line, content_lines, ))
-
-
-        start_ln = finish_ln = 0
-        for header_line, content_lines in sections:
-            # The headers line has the format '@@ +a,b -c,d @@[ e]' where
-            # a is the first line number shown from start and b is the
-            # number of lines shown from start, and c is the first line
-            # number show from finish and d is the number of lines show
-            # from from finish, and e is Git's guess at the name of the
-            # context (and is not always present)
-
-            headers = header_line.strip('@ \n').split(' ')
-            headers = map(lambda x: x.strip('+-').split(','), headers)
-
-            start_range = map(int, headers[0])
-            finish_range = map(int, headers[1])
-
-            while start_ln < start_range[0] - 1 and \
-                  finish_ln < finish_range[0] - 1:
-                forward[start_ln] = finish_ln
-                backward[finish_ln] = start_ln
-                start_ln += 1
-                finish_ln += 1
-
-            # Now we're into the diff itself. Individual lines of input
-            # are separated by a line containing only a '~', this helps
-            # to distinguish between an addition, a removal, and a change.
-
-            line_iter = iter(content_lines)
-            try:
-                while True:
-                    group_size = -1
-                    line_delta = 0
-                    line = ' '
-                    while line != '~':
-                        if line.startswith('+'):
-                            line_delta += 1
-                        elif line.startswith('-'):
-                            line_delta -= 1
-
-                        group_size += 1
-                        line = line_iter.next().rstrip()
-
-                    if group_size == 0:
-                        # Two '~' lines next to each other means a blank
-                        # line has been either added or removed. Git
-                        # doesn't tell us which. This is all crazy.
-                        if blank_lines.pop(0) == '+':
-                            line_delta += 1
-                        else:
-                            line_delta -= 1
-
-                    if line_delta == 1:
-                        backward[finish_ln] = None
-                        finish_ln += 1
-                    elif line_delta == -1:
-                        forward[start_ln] = None
-                        start_ln += 1
-                    else:
-                        forward[start_ln] = finish_ln
-                        backward[finish_ln] = start_ln
-                        start_ln += 1
-                        finish_ln += 1
-            except StopIteration:
-                pass
-
-        # Make sure the mappings stretch the the beginning and end of
-        # the files.
+            if typ == 'u':  # unchanged lines, advance both sides
+                for i in range(num_lines):
+                    forward[start_ln] = finish_ln
+                    backward[finish_ln] = start_ln
+                    start_ln += 1
+                    finish_ln += 1
+            elif typ == 'o':  # old/deleted lines, advance left side as they only exist there
+                for i in range(num_lines):
+                    forward[start_ln] = None
+                    start_ln += 1
+            elif typ == 'n':  # new/added lines, advance right side as they only exist there
+                for i in range(num_lines):
+                    backward[finish_ln] = None
+                    finish_ln += 1
 
         p = os.popen('git show %s:%s' % (start, self.path))
         start_len = len(p.readlines())
@@ -271,6 +226,8 @@ class GitFileHistory(object):
         p = os.popen('git show %s:%s' % (finish, self.path))
         finish_len = len(p.readlines())
 
+        # Make sure the mappings stretch the the beginning and end of
+        # the files.
         while start_ln <= start_len and finish_ln <= finish_len:
             forward[start_ln] = finish_ln
             backward[finish_ln] = start_ln
