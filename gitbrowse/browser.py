@@ -73,6 +73,17 @@ class GitBrowser(ModalScrollingInterface):
             'message': self.file_history.current_commit.message,
         }
 
+    def _update_mapping(self, start, finish):
+        mapping = self.file_history.line_mapping(start, finish)
+        new_highlight_line = mapping.get(self.highlight_line)
+        if new_highlight_line is not None:
+            self.highlight_line = new_highlight_line
+        else:
+            # The highlight_line setter validates the value, so it makes
+            # sense to set it to the same value here to make sure that it's
+            # not out of range for the newly loaded revision of the file.
+            self.highlight_line = self.highlight_line
+
     def _move_commit(self, method_name):
         start = self.file_history.current_commit.sha
 
@@ -83,15 +94,7 @@ class GitBrowser(ModalScrollingInterface):
 
         finish = self.file_history.current_commit.sha
 
-        mapping = self.file_history.line_mapping(start, finish)
-        new_highlight_line = mapping.get(self.highlight_line)
-        if new_highlight_line is not None:
-            self.highlight_line = new_highlight_line
-        else:
-            # The highlight_line setter validates the value, so it makes
-            # sense to set it to the same value here to make sure that it's
-            # not out of range for the newly loaded revision of the file.
-            self.highlight_line = self.highlight_line
+        self._update_mapping(start, finish)
 
     @ModalScrollingInterface.key_bindings(']')
     def next_commit(self, times=1):
