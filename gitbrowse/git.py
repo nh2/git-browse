@@ -113,9 +113,9 @@ class GitFileHistory(object):
 
         lines = []
 
-        p = os.popen('git blame -p %s %s' % (
-            self.path,
+        p = os.popen('git blame -p %s -- %s' % (
             self.current_commit.sha,
+            self.path,
         ))
 
         while True:
