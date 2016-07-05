@@ -41,8 +41,8 @@ class GitFileHistory(object):
                 start_commit,
             ))
 
-        if not verify_file(path):
-            raise ValueError('"%s" is not tracked by git' % (path, ))
+        if not verify_file(path, start_commit):
+            raise ValueError('"%s" is not tracked by git at commit %s' % (path, start_commit))
 
         self.path = path
 
@@ -267,11 +267,10 @@ def verify_revision(rev):
     return status == 0
 
 
-def verify_file(path):
+def verify_file(path, commit):
     """
     Verifies that a given file is tracked by Git and returns true or false
     accordingly.
     """
-    p = os.popen('git ls-files -- %s' % path)
-    matching_files = p.readlines()
-    return len(matching_files) > 0
+    exit_code = subprocess.Popen(['git', 'cat-file', '-e', '%s:%s' % (commit, path)]).wait()
+    return exit_code == 0
